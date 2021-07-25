@@ -1,0 +1,13 @@
+::sysinit:/bin/mount -t proc  none /proc
+::sysinit:/bin/mount -t sysfs none /sys
+::wait:/bin/iptables-restore /etc/iptables.conf
+::wait:/bin/sysctl -q -p
+::wait:/bin/ip addr add 10.0.0.1/24 dev eth0
+::wait:/bin/ip link set eth0 up
+::wait:/bin/ip addr add <IP>/<SN> dev eth1
+::wait:/bin/ip link set eth1 up
+::wait:/bin/ip route add default via <GW> dev eth1
+::respawn:/bin/udhcpd
+::once:/bin/echo Ready.
+::ctrlaltdel:/bin/dumpleases
+::restart:/init
