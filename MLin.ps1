@@ -314,7 +314,7 @@ Try {
 
     Invoke-WSL -BatchName 'IPTables' -Batch @(
         "tar --extract --bzip2 --file=$Source/$IPTables.tar.bz2 --directory=$Stage"
-        "cd $Stage/$IPTables && CFLAGS='-ffunction-sections -fdata-sections -Wl,--gc-sections -s' ./configure --prefix=$Stage/$IPTables/build --disable-shared --disable-ipv6 --disable-nftables --disable-largefile"
+        "cd $Stage/$IPTables && CFLAGS='-O2 -ffunction-sections -fdata-sections -Wl,--gc-sections -s' ./configure --prefix=$Stage/$IPTables/build --disable-shared --disable-ipv6 --disable-nftables --disable-largefile"
         "sed --in-place 's/LDFLAGS =/LDFLAGS = -all-static/' $Stage/$IPTables/iptables/Makefile"
         "make --directory=$Stage/$IPTables --jobs=$Threads"
         "make --directory=$Stage/$IPTables install"
