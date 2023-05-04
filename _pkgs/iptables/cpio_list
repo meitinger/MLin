@@ -1,0 +1,4 @@
+dir /bin 755 0 0
+slink /bin/iptables-restore xtables-legacy-multi 777 0 0
+file /bin/xtables-legacy-multi iptables/xtables-legacy-multi 755 0 0
+dir /run 755 0 0

@@ -1,4 +1,2 @@
-/busybox-*.tar.bz2
-/iptables-*.tar.bz2
-/linux-*.tar.xz
-/*.vhdx
+/bin
+/obj

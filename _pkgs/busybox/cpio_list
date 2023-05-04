@@ -1,0 +1,8 @@
+dir /bin 755 0 0
+file /bin/busybox busybox 755 0 0
+slink /bin/echo busybox 777 0 0
+slink /bin/ip busybox 777 0 0
+slink /bin/mount busybox 777 0 0
+slink /bin/sysctl busybox 777 0 0
+slink /bin/syslogd busybox 777 0 0
+slink /init /bin/busybox 777 0 0
