@@ -1,4 +1,4 @@
 $(call kconfig-package,\
-	https://busybox.net/downloads/busybox-1.34.1.tar.bz2,\
-	415fbd89e5344c96acf449d94a6f956dbed62e18e835fc83e064db33a34bd549\
+	https://busybox.net/downloads/busybox-1.36.1.tar.bz2,\
+	b8cc24c9574d809e7279c3be349795c5d5ceb6fdf19ca709f80cde50e47de314\
 )

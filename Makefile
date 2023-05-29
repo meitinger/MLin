@@ -18,8 +18,15 @@ obj ::= $(abspath $(if ${OBJ},${OBJ},obj))
 src ::= $(abspath $(if ${SRC},${SRC},.))
 pkg ::= $(src)/_pkgs
 
+CFLAGS += -fPIE -fcf-protection=full -fstack-clash-protection -fstack-protector-all -fzero-call-used-regs=used-gpr -fsanitize=bounds -fsanitize-undefined-trap-on-error -D_FORTIFY_SOURCE=3
+LDFLAGS += -pie -z relro -z now
+
 classes ::= $(notdir $(patsubst %/,%,$(dir $(wildcard ${src}/*/cpio_list))))
 gen_init_cpio ::= ${obj}/gen_init_cpio
+comma ::= ,
+downloads ::=
+mkdir ::= mkdir --parents $$(dir $$@)
+touch ::= touch $$@
 
 
 .DELETE_ON_ERROR:
@@ -34,17 +41,20 @@ clean:
 	rm --recursive --force ${obj}/*
 
 ${gen_init_cpio}: ${src}/gen_init_cpio.c
-	${CC} ${CFLAGS} -Wall -Werror -O2 -o $@ $+
+	${CC} -Wall -Werror -O2 -o $@ $+
 
 
-_files = $(shell grep '^\s*file\s' $1 | cut --delimiter=' ' --fields=3) # (cpio_file)
-_deps = $(addprefix $2,$(addsuffix $3,$(file < ${src}/$1/deps))) # (class, prefix, suffix)
+_deps = $(addprefix $2,$(addsuffix $3,$(file < $1/deps))) # (deps_path, prefix, suffix)
+_files = $(shell grep '^\s*file\s' $1/cpio_list | cut --delimiter=' ' --fields=3) # (cpio_list_path)
+_files_deps = $(foreach file,$(call _files,$1),$(if $(filter-out /%,${file}),$2/${file},${file})) # (cpio_list_path, filesroot)
+_sha256test = test $2 = $$$$(sha256sum $1 | cut --delimiter=' ' --fields=1) # (file, sha)
 
 
 define _class # (class, variants, kernel)
 
-$(if $3,,$(error No kernel package specified))
-$(if $(word 2,$3),$(error Multiple kernel packages specified),)
+$(if $3,,$(error $1: No kernel package specified))
+$(if $(word 2,$3),$(error $1: Multiple kernel packages specified),)
+$(foreach dep,$(call _deps,${src}/$1,,),$(if $(value ${dep}),,$(error $1: Dependency ${dep} not found)))
 $(if $2,$(foreach variant,$2,$(call _variant,$1,${variant},$3)),$(call _targets,$1,$1,src,$3))
 
 endef
@@ -54,25 +64,21 @@ define _targets # (subpath, class, filesroot, kernel)
 
 .PHONY: $1
 
-$1: $${bin}/$1.vhdx
+$1: $${bin}/$1.iso
 
-$${bin}/$1.vhdx: $${src}/makevhdx.sh $${obj}/$1/kernel/arch/x86/boot/bzImage
-	mkdir --parents $$(dir $$@)
+$${bin}/$1.iso: $${src}/makeiso.sh $${obj}/$1/kernel/arch/x86/boot/bzImage
+	${mkdir}
 	$$^ $$@
 
-$${obj}/$1/initramfs.cpio: $${gen_init_cpio} $${$3}/$1/cpio_list $(call _deps,$2,$${,_cpio_list})
-	mkdir --parents $$(dir $$@)
+$${obj}/$1/initramfs.cpio: $${gen_init_cpio} $(call _deps,${src}/$2,$${,_cpio_lists}) $${$3}/$1/cpio_list
+	${mkdir}
 	$$^ > $$@
 
-$${obj}/$1/initramfs.cpio: .EXTRA_PREREQS = $(addprefix $${$3}/$1/,$(call _files,${src}/$2/cpio_list)) $(call _deps,$2,$${,_cpio_deps})
+$${obj}/$1/initramfs.cpio: .EXTRA_PREREQS = $(call _files_deps,${src}/$2,$${$3}/$1) $(call _deps,${src}/$2,$${,_deps})
 
-$${obj}/$1/kernel/.config: $${pkg}/$4/config
-	mkdir --parents $$(dir $$@)
-	cp --force $$< $$@
-
-$${obj}/$1/kernel/arch/x86/boot/bzImage: $${$4_source} $${obj}/$1/initramfs.cpio $${obj}/$1/kernel/.config
-	KCONFIG_CONFIG=$${obj}/$1/kernel/.config INITRAMFS=$${obj}/$1/initramfs.cpio $${MAKE} --directory=$${obj}/$4 O=$${obj}/$1/kernel bzImage
-	touch --no-create $$@
+$${obj}/$1/kernel/arch/x86/boot/bzImage: $${obj}/$1/initramfs.cpio $${$4}/.ready
+	$${MAKE} --directory=$${$4} O=$${obj}/$1/kernel $4_defconfig
+	$${MAKE} --directory=$${$4} O=$${obj}/$1/kernel bzImage
 
 endef
 
@@ -85,10 +91,10 @@ $1: $1/$2
 
 $(call _targets,$1/$2,$1,obj,$3)
 
-$(foreach file,$(call _files,${src}/$1/cpio_list),$(call _variant_file,$1,$2,${file}))
+$(foreach file,$(call _files,${src}/$1),$(if $(filter-out /%,${file}),$(call _variant_file,$1,$2,${file})))
 
 $${obj}/$1/$2/cpio_list: $${src}/$1/cpio_list
-	mkdir --parents $$(dir $$@)
+	${mkdir}
 	cp --force $$< $$@
 
 endef
@@ -97,83 +103,107 @@ endef
 define _variant_file # (class, variant, file)
 
 $${obj}/$1/$2/$3: $${src}/substvar.sh $${src}/$1/$2.var $${src}/$1/$3
-	mkdir --parents $$(dir $$@)
+	${mkdir}
 	$$^ $$@
+
+endef
+
+
+define _download # (url, sha)
+
+downloads += $(notdir $1)
+
+$${obj}/$(notdir $1):
+	${mkdir}
+	wget --output-document=$$@ $1
+	$(call _sha256test,$$@,$2)
+	${touch}
+
+endef
+
+
+define _extract # (name, url, sha)
+
+$${$1}/.staged: $${obj}/$(notdir $2)
+	${mkdir}
+	$(call _sha256test,$$<,$3)
+	rm --recursive --force $${obj}/$(basename $(basename $(notdir $2))) $${$1}
+	tar --extract --directory=$${obj} --file=$$<
+	mv --force $${obj}/$(basename $(basename $(notdir $2))) $${$1}
+	${touch}
+
+$(if $(filter $(notdir $2),${downloads}),,$(call _download,$2,$3))
+
+endef
+
+
+define _harvest # (name)
+
+$1_cpio_lists += $${$1}/.cpio_list
+$1_deps += $${$1}/.ready $(filter /%,$(call _files,${pkg}/$1))
+
+$${$1}/.cpio_list: $${pkg}/$1/cpio_list $${$1}/.staged
+	cp --force $$< $$@
+
+endef
+
+
+define _package # (name, location)
+
+$1 = $2
+$1_cpio_lists = $(call _deps,${pkg}/$1,$${,_cpio_lists})
+$1_deps = $(call _deps,${pkg}/$1,$${,_deps})
 
 endef
 
 
 define _source_package # (name)
 
-$1_cpio_list = $${pkg}/$1/cpio_list
-$1_cpio_deps = $(addprefix $${pkg}/$1/,$(call _files,${pkg}/$1/cpio_list))
-
-endef
-
-
-define _extract_package # (name, url, sha)
-
-$1_source = $${obj}/$1/.sourced
-
-$${$1_source}: $${obj}/$(notdir $2)
-	test $3 = `sha256sum $$< | cut --delimiter=' ' --fields=1`
-	rm --recursive --force $${obj}/$(basename $(basename $(notdir $2))) $${obj}/$1
-	tar --extract --directory=$${obj} --file=$$<
-	mv --force $${obj}/$(basename $(basename $(notdir $2))) $${obj}/$1
-	touch $$@
-
-$${obj}/$(notdir $2):
-	mkdir --parents $$(dir $$@)
-	wget --output-document=$$@ $2
-	test $3 = `sha256sum $$@ | cut --delimiter=' ' --fields=1`
-	touch --no-create $$@
-
-endef
-
-
-define _harvest_package # (name)
-
-$1_build = $${obj}/$1/.built
-$1_cpio_list = $${obj}/$1/.cpio_list
-$1_cpio_deps = $${$1_build}
-
-$${$1_cpio_list}: $${pkg}/$1/cpio_list $${$1_build}
-	cp --force $$< $$@
+$(call _package,$1,$${pkg}/$1)
+$1_cpio_lists += $${$1}/cpio_list
+$1_deps += $(call _files_deps,${pkg}/$1,$${$1})
 
 endef
 
 
 define _kconfig_package # (name, url, sha)
 
-$(call _extract_package,$1,$2,$3)
-$(call _harvest_package,$1)
+$(call _package,$1,$${obj}/$1)
+$(call _extract,$1,$2,$3)
+$(call _harvest,$1)
 
-$${$1_build}: $${pkg}/$1/config $${$1_source}
-	cp --force $$< $${obj}/$1/.config
-	$${MAKE} --directory=$${obj}/$1
-	touch $$@
+$${$1}/.ready: $${pkg}/$1/config $${$1}/.staged
+	cp --force $$< $${$1}/.config
+	$${MAKE} --directory=$${$1} CFLAGS='$${CFLAGS}' LDFLAGS='$${LDFLAGS}'
+	${touch}
 
 endef
 
 
-define _configure_package # (name, url, sha, flags)
+define _configure_package # (name, url, sha, [flags])
 
-$(call _extract_package,$1,$2,$3)
-$(call _harvest_package,$1)
+$(call _package,$1,$${obj}/$1)
+$(call _extract,$1,$2,$3)
+$(call _harvest,$1)
 
-$${$1_build}: $${$1_source}
-	cd $${obj}/$1 && LDFLAGS='$${LDFLAGS} --static' ./configure --prefix=/ $4
-	$${MAKE} --directory=$${obj}/$1
-	touch $$@
+$${$1}/.ready: ${pkg}/$1/Makefile $${$1}/.staged
+	cd $${$1} && ./configure CFLAGS='$${CFLAGS}' LDFLAGS='$${LDFLAGS}' --prefix=/ $4
+	$${MAKE} --directory=$${$1}
+	${touch}
 
 endef
 
 
 define _kernel_package # (name, url, sha)
 
-$(call _extract_package,$1,$2,$3)
+$(call _package,$1,$${obj}/$1)
+$(call _extract,$1,$2,$3)
 
 $1_kernel = $1
+
+$${$1}/.ready: $${pkg}/$1/defconfig $${$1}/.staged
+	echo 'CONFIG_INITRAMFS_SOURCE="../initramfs.cpio"' | cat - $$< > $${$1}/arch/x86/configs/$1_defconfig
+	${touch}
 
 endef
 

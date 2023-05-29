@@ -1,0 +1,4 @@
+file /bin/nft src/.libs/nft 755 0 0
+slink /lib/libnftables.so libnftables.so.1.1.0 777 0 0
+slink /lib/libnftables.so.1 libnftables.so.1.1.0 777 0 0
+file /lib/libnftables.so.1.1.0 src/.libs/libnftables.so.1.1.0 644 0 0

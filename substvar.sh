@@ -20,7 +20,7 @@ if [[ $# -ne 3 ]]; then
     exit 1
 fi
 
-pattern='[A-Z][_A-Z0-9]*'
+readonly pattern='[A-Z][_A-Z0-9]*'
 declare -A vars
 while IFS= read -r line || [[ -n "${line}" ]]; do
     value=${line#${pattern}=}
@@ -33,7 +33,7 @@ while IFS= read -r line || [[ -n "${line}" ]]; do
 done < "$1"
 
 content=$(cat "$2")
-for tag in $(echo "${content}" | grep --only-matching "<${pattern}>" | sort --unique); do
+for tag in $(grep --only-matching "<${pattern}>" "$2" | sort --unique); do
     name=${tag:1:-1}
     value=${vars[${name}]?"undefined variable: ${name}"}
     content=${content//${tag}/${value}}

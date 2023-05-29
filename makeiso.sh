@@ -16,30 +16,19 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 if [[ $# -ne 2 ]]; then
-    >&2 echo "USAGE: $0 <kernel> <vhdx>"
+    >&2 echo "USAGE: $0 <kernel> <iso>"
     exit 1
 fi
 
-fatsectors=$(( 2048 + $(stat --dereference --format=%s "$1") / 512 ))
+readonly dir=$(mktemp --directory)
+trap 'rm --force --recursive "${dir}"' EXIT
 
-img=
-fat=
-function cleanup {
-    ${img+rm --force "${img}"}
-    ${fat+rm --force "${fat}"}
-}
-trap cleanup EXIT
-img=$(mktemp)
-fat=$(mktemp)
+readonly img=${dir}/boot.img
+truncate --size=$(( $(stat --dereference --format=%s "$1") + 1048576 )) "${img}"
+mformat -i "${img}" -v EFI ::
 
-truncate --size=$(( ${fatsectors} * 512 )) "${fat}"
-mformat -i "${fat}" -v EFI ::
-mmd -i "${fat}" ::/EFI
-mmd -i "${fat}" ::/EFI/BOOT
-mcopy -i "${fat}" "$1" ::/EFI/BOOT/BOOTX64.EFI
+mmd -i "${img}" ::/EFI
+mmd -i "${img}" ::/EFI/BOOT
+mcopy -i "${img}" "$1" ::/EFI/BOOT/BOOTX64.EFI
 
-truncate --size=$(( ( 34 + ${fatsectors} + 34 ) * 512 )) "${img}"
-parted --script "${img}" mklabel gpt mkpart EFI fat16 34s $(( 34 + ${fatsectors}))s set 1 esp
-dd bs=512 if="${fat}" of="${img}" seek=34 status=none
-
-qemu-img convert -f raw -O vhdx "${img}" "$2"
+mkisofs -efi-boot boot.img -no-emul-boot -input-charset utf-8 -output "$2" "${dir}"

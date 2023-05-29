@@ -560,7 +560,7 @@ int main (int argc, char *argv[])
 	for (int i = 1; i < argc; i++) {
 		filename = argv[i];
 		if (!(cpio_list = fopen(filename, "r"))) {
-			fprintf(stderr, "ERROR: unable to open '%s': %s\n\n",
+			fprintf(stderr, "[%s] unable to open: %s\n\n",
 				filename, strerror(errno));
 			ec = -1;
 			break;
@@ -608,7 +608,7 @@ int main (int argc, char *argv[])
 				if (! strcmp(line, file_handler_table[type_idx].type)) {
 					if ((rc = file_handler_table[type_idx].handler(args, filename))) {
 						ec = rc;
-						fprintf(stderr, "[%s]  line %d\n", filename, line_nr);
+						fprintf(stderr, "[%s] line %d\n", filename, line_nr);
 					}
 					break;
 				}

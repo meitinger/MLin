@@ -1,0 +1,5 @@
+file /etc/inittab etc/inittab 644 0 0
+file /etc/nftables.conf etc/nftables.conf 644 0 0
+file /etc/sysctl.conf etc/sysctl.conf 644 0 0
+file /etc/udhcpd.conf etc/udhcpd.conf 644 0 0
+file /run/udhcpd.leases run/udhcpd.leases 644 0 0

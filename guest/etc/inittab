@@ -1,0 +1,18 @@
+::sysinit:/bin/mount -t proc  none /proc
+::sysinit:/bin/mount -t sysfs none /sys
+::wait:/bin/nft -f /etc/nftables.conf
+::wait:/bin/sysctl -q -p
+::wait:/bin/ip addr add <LAN_IP>/<LAN_SN> dev eth0
+::wait:/bin/ip addr add 10.0.0.<ID>/22 dev eth1
+::wait:/bin/ip addr add <WAN_IP>/<WAN_SN> dev eth2
+::wait:/bin/ip link set eth0 up
+::wait:/bin/ip link set eth1 up
+::wait:/bin/ip link set eth2 up
+::wait:/bin/ip route add <LAN_NET> via <LAN_GW> dev eth0
+::wait:/bin/ip route add default via <WAN_GW> dev eth2
+::respawn:/bin/nc -ll -s <LAN_IP> -p 2666 -e /bin/conntrack -L
+::respawn:/bin/nc -ll -s <LAN_IP> -p 3427 -e /bin/dumpleases
+::respawn:/bin/nc -ll -s <LAN_IP> -p 3674 -e /bin/dmesg
+::respawn:/bin/udhcpd -f
+::once:/bin/echo GUEST-<ID>-<NAME> ready.
+::restart:/init
